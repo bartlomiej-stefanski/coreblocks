@@ -23,6 +23,8 @@ class FPUTester:
         self.converter = ToFloatConverter(params)
 
     def __compare_results__(self, lhs, rhs):
+        if lhs["is_nan"] and rhs["is_nan"]:
+          return # For NaN values IEEE 754 leaves sign and significand undefined.
         assert lhs["sign"] == rhs["sign"]
         assert lhs["exp"] == rhs["exp"]
         assert lhs["sig"] == rhs["sig"]
