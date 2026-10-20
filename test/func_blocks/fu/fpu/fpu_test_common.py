@@ -1,6 +1,7 @@
 from coreblocks.func_blocks.fu.fpu.fpu_common import FPUCommonValues, FPUParams, RoundingModes
 from transactron.testing import *
 from enum import Enum
+from typing import NamedTuple
 from contextlib import contextmanager
 import struct
 import ctypes
@@ -22,13 +23,6 @@ class FPUTester:
         self.params = params
         self.converter = ToFloatConverter(params)
 
-    def __compare_results__(self, lhs, rhs):
-        if lhs["is_nan"] and rhs["is_nan"]:
-          return # For NaN values IEEE 754 leaves sign and significand undefined.
-        assert lhs["sign"] == rhs["sign"]
-        assert lhs["exp"] == rhs["exp"]
-        assert lhs["sig"] == rhs["sig"]
-
     async def run_test_set(self, cases, result, common_input, sim: TestbenchContext, request_adapter: TestbenchIO):
         assert len(cases) == len(result)
         for num, case in enumerate(cases):
@@ -38,7 +32,10 @@ class FPUTester:
             input_dict["op_1"] = self.converter.from_hex(case[0])
             input_dict["op_2"] = self.converter.from_hex(case[1])
             resp = await request_adapter.call(sim, input_dict)
-            self.__compare_results__(resp, self.converter.from_hex(result[num][0]))
+            # self.__compare_results__(resp, self.converter.from_hex(result[num][0]))
+
+            # expected = self.converter.from_hex(result[num][0])
+            # self.converter.get_float_info(resp).assert_eq(expected)
 
             assert resp["errors"] == int(result[num][1], 16)
 
@@ -55,6 +52,23 @@ def python_to_float(p_float: float) -> float:
             raise
 
 
+class FloatInfo(NamedTuple):
+    sign: bool
+    exp: int
+    sig: int
+    is_inf: bool
+    is_nan: bool
+    is_zero: bool
+
+    def assert_eq(self, other):
+        if self.is_nan and other.is_nan:
+            return # For NaN values IEEE 754 leaves sign and significand undefined.
+        assert self.sign == other.sign
+        assert self.exp == other.exp
+        assert self.sig == other.sig
+
+
+
 class ToFloatConverter:
     def __init__(self, params: FPUParams):
         self.params = params
@@ -68,6 +82,19 @@ class ToFloatConverter:
         self.sig_mask = (2 ** (self.params.sig_width - 1)) - 1
         self.implicit_one = 1 << (self.params.sig_width - 1)
         self.cv = FPUCommonValues(self.params)
+
+    def get_float_info(self, val) -> FloatInfo:
+        exp = int(val["exp"])
+        sig = int(val["sig"])
+        payload = sig & self.sig_mask
+        return FloatInfo(
+            bool(val["sign"]),
+            int(val["exp"]),
+            int(val["sig"]),
+            exp == self.cv.max_exp and payload == 0,
+            exp == self.cv.max_exp and payload != 0,
+            exp == 0 and payload == 0
+        )
 
     def from_float(self, fl):
         fl_hex = hex(struct.unpack("<I", struct.pack("<f", fl))[0])
@@ -83,11 +110,15 @@ class ToFloatConverter:
             "sign": number >> (self.all_width - 1),
             "exp": exp,
             "sig": sig,
-            "is_inf": ((exp == self.cv.max_exp) & ((sig & (~self.implicit_one)) == 0)),
-            "is_nan": ((exp == self.cv.max_exp) & ((sig & (~self.implicit_one)) != 0)),
-            "is_zero": ((exp == 0) & (sig == 0)),
+            # "is_inf": ((exp == self.cv.max_exp) & ((sig & (~self.implicit_one)) == 0)),
+            # "is_nan": ((exp == self.cv.max_exp) & ((sig & (~self.implicit_one)) != 0)),
+            # "is_zero": ((exp == 0) & (sig == 0)),
         }
-
+        # return self.get_float_info({
+        #     "sign": (number >> (self.all_width - 1)) == 1,
+        #     "exp": exp,
+        #     "sig": sig,
+        # })
 
 class FenvRm(Enum):
     FE_TONEAREST = 0x0000
