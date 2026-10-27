@@ -75,14 +75,13 @@ class ToFloatConverter:
         number = int(hex_float, 16)
         exp = (number >> self.sig_width) & self.exp_mask
         sig = number & self.sig_mask
-        if exp != 0:
-            sig = sig | self.implicit_one
+        sig_with_implicit_one = sig | self.implicit_one if exp != 0 else sig
         return {
             "sign": number >> (self.all_width - 1),
             "exp": exp,
-            "sig": sig,
-            "is_inf": ((exp == self.cv.max_exp) & ((sig & (~self.implicit_one)) == 0)),
-            "is_nan": ((exp == self.cv.max_exp) & ((sig & (~self.implicit_one)) != 0)),
+            "sig": sig_with_implicit_one,
+            "is_inf": ((exp == self.cv.max_exp) & (sig == 0)),
+            "is_nan": ((exp == self.cv.max_exp) & (sig != 0)),
             "is_zero": ((exp == 0) & (sig == 0)),
         }
 
