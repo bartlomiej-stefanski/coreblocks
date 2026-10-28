@@ -124,20 +124,18 @@ class FPUTester:
         self.params = params
         self.converter = FloatConverter(params)
 
-    async def run_test_set(self, cases, result, common_input, sim: TestbenchContext, request_adapter: TestbenchIO):
-        assert len(cases) == len(result)
-        for num, case in enumerate(cases):
-            input_dict = {}
-            for key, value in common_input.items():
-                input_dict[key] = value
-
-            input_dict["op_1"] = self.converter.to_input_data(case[0])
-            input_dict["op_2"] = self.converter.to_input_data(case[1])
-            resp = await request_adapter.call(sim, input_dict)
-
-            (result_data, result_errors) = (result[num][0], result[num][1])
-            expected = self.converter.to_output_data(result_data, result_errors)
-            assert resp == expected
+    async def run_test_set(
+        self, cases, input_generator, expected_generator, sim: TestbenchContext, request_adapter: TestbenchIO
+    ):
+        for rm in RoundingModes:
+            for case in cases:
+                input_dict = input_generator(case, rm)
+                resp = await request_adapter.call(sim, input_dict)
+                expected = expected_generator(case, rm)
+                print(f"case: {case}")
+                print(f"expected: {expected}")
+                print(f"resp: {resp}")
+                assert expected == resp
 
 
 class FloatConverter:
